@@ -1,6 +1,6 @@
-# Project DIVA f 2nd 60 fps patch (PS Vita)
+# Project DIVA F2nd 60 fps patch-er (PS Vita)
 
-Makes Hatsune Miku: Project DIVA f 2nd now running at 60 fps instead of 30.
+Makes Hatsune Miku: Project DIVA F2nd rut at 60 fps instead of 30.
 
 Works with the EU (`PCSB00554`) and US (`PCSE00434`) versions. 
 
