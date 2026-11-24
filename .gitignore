@@ -1,0 +1,6 @@
+build/
+*.suprx
+*.velf
+*.elf
+*.o
+__pycache__/
