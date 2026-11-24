@@ -3,21 +3,35 @@ import os
 import re
 import struct
 import subprocess
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BUILD = os.path.join(HERE, 'build')
 OUT_HEADER = os.path.join(HERE, '..', 'plugin', 'patches.h')
 TOOLCHAIN = os.environ.get('VITASDK', '/usr/local/vitasdk') + '/bin/arm-vita-eabi-'
 STOCK_EBOOT = os.environ['DIVA_EU_EBOOT']
+TARGET = sys.argv[1] if len(sys.argv) > 1 else 'plugin'
+if TARGET not in ('plugin', 'vita3k'):
+    raise SystemExit('usage: gen_patches.py [plugin|vita3k]')
 
 SEG0_BASE = 0x81000000
 SEG0_SIZE = 0x71B000
 SEG1_BASE = 0x8171B000
 SEG1_SIZE = 0x80000
-CAVE_OFF = 0x71AB00
+if TARGET == 'plugin':
+    CAVE_OFF = 0x71AB00
+    CAVE_LIMIT = 0x71AD00
+    DATA_VA = 0x81E42070
+else:
+    CAVE_OFF = 0x6B6B20
+    CAVE_LIMIT = CAVE_OFF + 0x200
+    DATA_VA = SEG0_BASE + CAVE_LIMIT
 CAVE_VA = SEG0_BASE + CAVE_OFF
-CAVE_LIMIT = 0x71AD00
-DATA_VA = 0x81E42070
+VITA3K_REGIONS = {
+    'PCSB00554': ('DIVA_EU_EBOOT', SEG0_BASE, SEG1_BASE),
+    'PCSE00434': ('DIVA_US_EBOOT', 0x81000300, 0x81800CE0),
+}
+region_bases = (SEG0_BASE, SEG1_BASE)
 TWEEN_SITE = 0x8120E6C2
 
 GAME_SYMBOLS = {
@@ -42,6 +56,12 @@ C_FLAGS = ['-O2', '-mthumb', '-mcpu=cortex-a9', '-mfpu=vfpv3', '-mfloat-abi=hard
            '-mword-relocations', '-ffreestanding', '-fno-pic', '-nostdlib', '-Wall']
 
 
+def rebase(va):
+    if va >= SEG1_BASE:
+        return va - SEG1_BASE + region_bases[1]
+    return va - SEG0_BASE + region_bases[0]
+
+
 def run(tool, *args):
     subprocess.run([TOOLCHAIN + tool, *args], check=True, cwd=BUILD)
 
@@ -53,22 +73,22 @@ def site_section(name, body):
 
 def build_sites(sites):
     asm = ''
-    link = [f'{name} = {va:#x};' for name, va in GAME_SYMBOLS.items()]
+    link = [f'{name} = {rebase(va):#x};' for name, va in GAME_SYMBOLS.items()]
     link.append('SECTIONS {')
     pieces = []
     for name, va, body in FIXED_SITES:
         asm += site_section(name, body)
-        link.append(f'\t.{name} {va:#x} : {{ *(.{name}) }}')
+        link.append(f'\t.{name} {rebase(va):#x} : {{ *(.{name}) }}')
         pieces.append((name, va))
     for i, (va, reg) in enumerate(sites):
         va = int(va, 16)
         target = 'tween_stub' if va == TWEEN_SITE else f'shim_r{reg}'
         name = f's_c{i}'
         asm += site_section(name, [f'bl\t{target}', 'nop', 'nop'])
-        link.append(f'\t.{name} {va:#x} : {{ *(.{name}) }}')
+        link.append(f'\t.{name} {rebase(va):#x} : {{ *(.{name}) }}')
         pieces.append((name, va))
-    link.append(f'\t.cave {CAVE_VA:#x} : {{ *(.text .text.* .rodata .rodata.*) }}')
-    link.append(f'\t.dat {DATA_VA:#x} : {{ *(.dat) }}')
+    link.append(f'\t.cave {rebase(CAVE_VA):#x} : {{ *(.text .text.* .rodata .rodata.*) }}')
+    link.append(f'\t.dat {rebase(DATA_VA):#x} : {{ *(.dat) }}')
     link.append('}')
     return asm, '\n'.join(link) + '\n', pieces
 
@@ -154,8 +174,42 @@ def write_header(pieces, cave, data, relocs):
     open(OUT_HEADER, 'w').write('\n'.join(out) + '\n')
 
 
+def write_vita3k(sites):
+    global region_bases
+    outdir = os.path.join(HERE, '..', 'vita3k')
+    os.makedirs(outdir, exist_ok=True)
+    reference = open(STOCK_EBOOT, 'rb').read()
+    ref_seg0 = segment0_file_offset(reference)
+    for title, (env, seg0_base, seg1_base) in VITA3K_REGIONS.items():
+        path = os.environ.get(env)
+        if not path:
+            print(f'{title}: {env} not set, skipped')
+            continue
+        region_bases = (seg0_base, seg1_base)
+        pieces = compile_and_link(sites)
+        cave = read_bin('cave')
+        data = read_bin('dat')
+        assert CAVE_OFF + len(cave) <= CAVE_LIMIT, f'cave ends at {CAVE_OFF + len(cave):#x}, past its slot'
+        patches = [(va - SEG0_BASE, read_bin(name)) for name, va in pieces]
+        eboot = open(path, 'rb').read()
+        seg0 = segment0_file_offset(eboot)
+        for off, blob in patches:
+            if eboot[seg0 + off:seg0 + off + len(blob)] != reference[ref_seg0 + off:ref_seg0 + off + len(blob)]:
+                raise SystemExit(f'{title}: stock bytes at seg0+{off:#x} differ from the EU eboot')
+        data_off = DATA_VA - SEG0_BASE
+        if any(eboot[seg0 + off] for off in range(CAVE_OFF, data_off + len(data))):
+            raise SystemExit(f'{title}: cave area at seg0+{CAVE_OFF:#x} is not zero')
+        lines = [f'0:0x{off:X} ' + ' '.join(f'0x{b:02X}' for b in blob)
+                 for off, blob in patches + [(CAVE_OFF, cave), (data_off, data)]]
+        open(os.path.join(outdir, title + '.txt'), 'w').write('\n'.join(lines) + '\n')
+        print(f'{title}: wrote vita3k/{title}.txt')
+
+
 def main():
     sites = json.load(open(os.path.join(HERE, 'sites.json')))
+    if TARGET == 'vita3k':
+        write_vita3k(sites)
+        return
     pieces = compile_and_link(sites)
     cave = read_bin('cave')
     data = read_bin('dat')
