@@ -26,6 +26,12 @@ or
 
 To actually hit a stable 60 i recommend to overclock your vita.
 
+## Vita3K
+
+1. Copy `vita3k/PCSB00554.txt` (EU) into Vita3K's `patch` folder
+2. Restart the game.
+
+
 ## Hotkey
 
 L + R + SELECT switches between 60 and 30 fps.
