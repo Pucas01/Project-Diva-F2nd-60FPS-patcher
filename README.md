@@ -28,7 +28,7 @@ To actually hit a stable 60 i recommend to overclock your vita.
 
 ## Vita3K
 
-1. Copy `vita3k/PCSB00554.txt` (EU) into Vita3K's `patch` folder
+1. Copy `vita3k/PCSB00554.txt` (EU) or `vita3k/PCSE00434.txt` (US) into Vita3K's `patch` folder
 2. Restart the game.
 
 
