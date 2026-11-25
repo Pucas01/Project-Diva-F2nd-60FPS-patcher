@@ -87,7 +87,7 @@ int module_start(SceSize args, const void *argp) {
 		return SCE_KERNEL_START_NO_RESIDENT;
 
 	memcpy(data, r->data_init, r->data_size);
-	uint8_t cave[0x200];
+	uint8_t cave[0x300];
 	if (r->cave_size > sizeof(cave))
 		return SCE_KERNEL_START_NO_RESIDENT;
 	fix_cave(r, cave, seg0, seg1);

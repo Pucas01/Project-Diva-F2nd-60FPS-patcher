@@ -85,6 +85,15 @@ uint32_t tick_gate(uint32_t value, struct task *task) {
 	return task_running(vtable_song) ? value : 0;
 }
 
+uint32_t held_gate(const uint8_t *pad, uint32_t key, int set) {
+	if (!state.mode && (frame_counter & 1))
+		return 0;
+	if ((uint32_t)set > 1 || key >= 0x67)
+		return 0;
+	const uint16_t *bits = (const uint16_t *)(pad + set * 0xE + (key >> 4) * 2 + 0x54);
+	return (*bits >> (key & 0xF)) & 1;
+}
+
 union bits { float f; uint32_t u; };
 
 uint32_t tween_step(const uint32_t *tween) {

@@ -16,7 +16,7 @@ if TARGET not in ('plugin', 'vita3k'):
 SEG0_BASE = 0x81000000
 SEG1_SPAN = 0x80000
 PLUGIN_DATA_VA = 0x81E42070
-CAVE_SLOT = 0x200
+CAVE_SLOT = 0x300
 
 C_FLAGS = ['-O2', '-mthumb', '-mcpu=cortex-a9', '-mfpu=vfpv3', '-mfloat-abi=hard',
            '-mword-relocations', '-ffreestanding', '-fno-pic', '-nostdlib', '-Wall']
@@ -26,8 +26,9 @@ FIXED_BODIES = {
     's_getter': ['b.w\tget_scale'],
     's_f3':     ['bl\tget_ui_scale'],
     's_gate':   ['bl\ttick_gate_stub'],
+    's_held':   ['b.w\theld_gate'],
 }
-FIXED_ORDER = ['s_vblank', 's_getter', 's_f3', 's_gate']
+FIXED_ORDER = ['s_vblank', 's_getter', 's_f3', 's_gate', 's_held']
 BL_SITES = {'s_vblank': 2, 's_f3': 0}
 TITLE_ENV = {'PCSB00554': 'DIVA_EU_EBOOT', 'PCSE00434': 'DIVA_US_EBOOT', 'PCSG00205': 'DIVA_JP_EBOOT'}
 
